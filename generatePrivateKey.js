@@ -1,6 +1,11 @@
 let express = require('express');
 let bip39 = require('bip39');
+let sha256 = require('sha256');
+var bs58check = require('bs58check');
+let axios = require('axios');
+let bitcore = require('bitcore-lib')
 let HDKey = require('hdkey');
+var bitcoinTransaction = require('bitcoin-transaction');
 const { validate, getAddressInfo } = require('bitcoin-address-validation')
 let bitcoin = require('bitcoinjs-lib');
 
@@ -47,8 +52,90 @@ import('tiny-secp256k1').then(ecc => BIP32Factory(ecc)).then(bip32 => {
     let child = node.derivePath('m/0/0').__D;
     let privateKey = child.toString('hex');
     privKey = privateKey;
+
+    // const pri = 'ef'.concat(privateKey)
+    //   console.log(pri);
+
+    //   const sha2 = sha256(sha256(pri))
+    //   console.log(sha2.toString('hex'));
+
+    //   const checksum = sha2.slice(0,8).toString('hex')
+    //   console.log(checksum);
+
+    //   const sastaPrivate = pri.concat(checksum)
+    //   console.log(sastaPrivate);
+
+    //   var decoded = bs58check.decode(sastaPrivate);
+    //   console.log(bs58check.encode(decoded))
     //console.log("privateKey:",privateKey);
 })
+
+/**----------------------------------------------Transfer---------------------------------------------- */
+
+const sendBitcoin = async (recieverAddress, amountToSend) => {
+    const sochain_network = "BTCTEST";
+    const privateKey = 'KypZ6aJ3ARquAf1dbRvPiK1tqbt4GtJ4pp1pdcrybKu9mpiVLPiK';
+    const sourceAddress = "mufjUT3pF2KwNiC2UPBaFhyvLA4nUGd9P3";
+    const satoshiToSend = amountToSend * 100000000;
+    let fee = 0;
+    let inputCount = 0;
+    let outputCount = 2;
+    const utxos = await axios.get(
+      `https://sochain.com/api/v2/get_tx_unspent/${sochain_network}/${sourceAddress}`
+    );
+    const transaction = new bitcore.Transaction();
+    let totalAmountAvailable = 0;
+  
+    let inputs = [];
+    utxos.data.data.txs.forEach(async (element) => {
+      let utxo = {};
+      utxo.satoshis = Math.floor(Number(element.value) * 100000000);
+      utxo.script = element.script_hex;
+      utxo.address = utxos.data.data.address;
+      utxo.txId = element.txid;
+      utxo.outputIndex = element.output_no;
+      totalAmountAvailable += utxo.satoshis;
+      inputCount += 1;
+      inputs.push(utxo);
+    });
+  
+    transactionSize = inputCount * 146 + outputCount * 34 + 10 - inputCount;
+    // Check if we have enough funds to cover the transaction and the fees assuming we want to pay 20 satoshis per byte
+  
+    fee = transactionSize * 2
+    if (totalAmountAvailable - satoshiToSend - fee  < 0) {
+      throw new Error("Balance is too low for this transaction");
+    }
+  
+    //Set transaction input
+    transaction.from(inputs);
+  
+    // set the recieving address and the amount to send
+    transaction.to(recieverAddress, satoshiToSend);
+  
+    // Set change address - Address to receive the left over funds after transfer
+    transaction.change(sourceAddress);
+  
+    //manually set transaction fees: 2 satoshis per byte
+    transaction.fee(fee * 2);
+  
+    // Sign transaction with your private key
+    transaction.sign(privateKey);
+  
+    // serialize Transactions
+    const serializedTransaction = transaction.serialize();
+    // Send transaction
+    const result = await axios({
+      method: "POST",
+      url: `https://sochain.com/api/v2/send_tx/${sochain_network}`,
+      data: {
+        tx_hex: "success",
+      },
+    });
+    return result.data.data;
+  };
+
+  sendBitcoin("tb1qz92f8mstgexl6m33jwgwx223lpdkur48tt3zux", 0.0001);
 
 /**----------------------------------------------Routers------------------------------------------------*/
 
