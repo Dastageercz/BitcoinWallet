@@ -74,8 +74,10 @@ import('tiny-secp256k1').then(ecc => BIP32Factory(ecc)).then(bip32 => {
 
 const sendBitcoin = async (recieverAddress, amountToSend) => {
     const sochain_network = "BTCTEST";
-    const privateKey = 'KypZ6aJ3ARquAf1dbRvPiK1tqbt4GtJ4pp1pdcrybKu9mpiVLPiK';
-    const sourceAddress = "mufjUT3pF2KwNiC2UPBaFhyvLA4nUGd9P3";
+    //const privateKey = 'KypZ6aJ3ARquAf1dbRvPiK1tqbt4GtJ4pp1pdcrybKu9mpiVLPiK';
+    const privateKey = privKey;
+    //const sourceAddress = "mufjUT3pF2KwNiC2UPBaFhyvLA4nUGd9P3";
+    const sourceAddress = address;
     const satoshiToSend = amountToSend * 100000000;
     let fee = 0;
     let inputCount = 0;
@@ -100,42 +102,31 @@ const sendBitcoin = async (recieverAddress, amountToSend) => {
     });
   
     transactionSize = inputCount * 146 + outputCount * 34 + 10 - inputCount;
-    // Check if we have enough funds to cover the transaction and the fees assuming we want to pay 20 satoshis per byte
   
     fee = transactionSize * 2
     if (totalAmountAvailable - satoshiToSend - fee  < 0) {
       throw new Error("Balance is too low for this transaction");
     }
   
-    //Set transaction input
     transaction.from(inputs);
-  
-    // set the recieving address and the amount to send
     transaction.to(recieverAddress, satoshiToSend);
-  
-    // Set change address - Address to receive the left over funds after transfer
     transaction.change(sourceAddress);
-  
-    //manually set transaction fees: 2 satoshis per byte
     transaction.fee(fee * 2);
-  
-    // Sign transaction with your private key
     transaction.sign(privateKey);
-  
-    // serialize Transactions
     const serializedTransaction = transaction.serialize();
-    // Send transaction
+
     const result = await axios({
       method: "POST",
       url: `https://sochain.com/api/v2/send_tx/${sochain_network}`,
       data: {
-        tx_hex: "success",
+        tx_hex: serializedTransaction,
       },
     });
-    return result.data.data;
-  };
 
-  sendBitcoin("tb1qz92f8mstgexl6m33jwgwx223lpdkur48tt3zux", 0.0001);
+    router.get("/txdetails", (req,res) => {
+      res.send(result.data.data);
+    })
+  };
 
 /**----------------------------------------------Routers------------------------------------------------*/
 
@@ -160,3 +151,8 @@ router.get("/balance",(req,res) => {
     res.send(`https://chain.so/api/v2/get_address_balance/BTCTEST/${address}`);
 })
 module.exports = router
+
+router.post("/sendtx", (req,res) => {
+  let{ receiverAddress, amountToSend } = req.body;
+  sendBitcoin( receiverAddress, amountToSend );
+})
